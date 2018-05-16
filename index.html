@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html>
+<head>
+ 	<meta charset="utf-8" />
+ 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+ 	<script src='https://api.mapbox.com/mapbox-gl-js/v0.44.2/mapbox-gl.js'></script>
+ 	<link rel="stylesheet" href="https://rawgit.com/tpreusse/radar-chart-d3/master/src/radar-chart.css">
+ 	<link href='https://api.mapbox.com/mapbox-gl-js/v0.44.2/mapbox-gl.css' rel='stylesheet' />
+ 	<script src="http://d3js.org/d3.v3.js"></script>
+	<script src="https://rawgit.com/tpreusse/radar-chart-d3/master/src/radar-chart.js"></script>
+ 	<link href='style.css' rel='stylesheet' />
+ 	<link href="https://fonts.googleapis.com/css?family=Josefin+Sans" rel="stylesheet">
+    <link href='https://api.tiles.mapbox.com/mapbox.js/v1.0.0/mapbox.css' rel='stylesheet' />
+<script src='https://api.tiles.mapbox.com/mapbox.js/v1.0.0/mapbox.js'></script>
+<!-- <script src='zip_code_040114.json'></script> -->
+<script src='cheerup.json'></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+</head>
+<style>
+ html,
+ body {
+     padding: 0;
+     margin: 0;
+     width: 100%;
+     height: 100%;
+ }
+ .leaflet-top-pane {
+     pointer-events: none;
+ }
+
+ .rectangle {
+	fill: black;
+	width:60px;
+}
+.rectangle:hover {
+	fill: #0a609d;
+}
+.axis {
+  font: 15px sans-serif;
+
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+
+</style>
+<body>
+    <h1 style="border-style:solid;">NYC ziplorer</h1>
+    <section>
+	<div id="navbar">
+		<a href="#">Noise</a>
+			<form required class="noisebuttons" name="noisebuttons">
+				<input type="radio" name="noise" value="1"> Low
+				<input type="radio" name="noise" value="2">Medium
+				<input type="radio" name="noise"  value="3">High
+			</form>
+		<a href="#">Parks</a>
+			<form required class="parksbuttons" name="parksbuttons">
+				<input type="radio" name="parks"  value="1"> Low
+				<input type="radio" name="parks"  value="2">Medium
+				<input type="radio" name="parks"  value="3">High
+			</form>
+
+		<a href="#">Income</a>
+			<form required class="incomebuttons" name = "incomebuttons">
+				<input type="radio" name="income"  value="1"> <$78,000
+				<input type="radio" name="income"  value="2"> $78,000 - $168,000
+				<input type="radio" name="income"  value="3"> $168,000 - $258,000
+				<input type="radio" name="income"  value="4"> $258,000 - $348,000
+				<input type="radio" name="income"  value="5"> > $348,000
+			</form>
+
+		<button onclick="set_values()" class="submitbutton">Update Filter</button>
+	</div>
+
+	<center><div style="padding-top:130px" id = "zipcodes"></div></center>
+
+    <div id="container" style="height:100%;width:100%">
+	<div id='map' style="float:right;"></div>
+    <div id="reset">Reset Filter</div>
+    <div id="scroll">Click to See More</div>
+    </div>
+	<script>
+	//reading data
+    var zip = {};
+    var zcodes = [];
+    var visit = [];
+    var svgList;
+
+resetZip();
+
+function resetZip(){
+    d3.csv("data.csv", function(err, data){
+        data.map(function(d) {
+          if(zip[d.Zip] == undefined) {
+            zip[d.Zip] = [];
+          }
+          zip[d.Zip].income = d.Income;
+          zip[d.Zip].parks = d.Park;
+          zip[d.Zip].noise = d.NoiseComplaints;
+        });
+    });
+}
+
+    function set_values() {
+
+			var parks = $("input[name=parks]:checked").val();
+			var noise = $("input[name=noise]:checked").val();
+			var income = $("input[name=income]:checked").val();
+
+		d3.csv("data.csv", function(err, data){
+	        data.map(function(d) {
+	          if(zip[d.Zip] == undefined) {
+	            zip[d.Zip] = [];
+	          }
+	          zip[d.Zip].income = d.Income;
+	          zip[d.Zip].parks = d.Park;
+	          zip[d.Zip].noise = d.NoiseComplaints;
+
+	        });
+
+			zcodes = filter(income, parks, noise, data);
+            setMap();
+            var newText = "The zip codes closest to your needs are " + zcodes;
+            $("#textportion p").text(newText);
+
+		});
+
+	}
+
+	function getNewIncome(data, num1, num2) {
+		// body...
+		var newdata = [];
+		for (var i = 0; i < data.length; i++) {
+			if (data[i].Income> num1 && data[i].Income<= num2) {
+				newdata.push(data[i]);
+			}
+		}
+
+		if(newdata.length == 0){
+			newdata = data;
+		}
+
+		return newdata
+	}
+
+	function getNoiseParks(data, num1, num2){
+		var newdata = [];
+
+		for (var i = 0; i < data.length; i++) {
+			if (data[i].Park> num1 && data[i].Park <= num2) {
+				newdata.push(data[i]);
+			}
+
+		}
+
+		if(newdata.length == 0){
+			newdata = data;
+		}
+
+		return newdata;
+	}
+
+	function getNewNoise(data, num1, num2){
+		var newdata = [];
+
+		for (var i = 0; i < data.length; i++) {
+			if (data[i].NoiseComplaints > num1 && data[i].NoiseComplaints <= num2) {
+
+				newdata.push(data[i]);
+			}
+
+		}
+
+
+		if(newdata.length == 0){
+			newdata = data;
+		}
+
+		return newdata;
+	}
+
+	function zipcodes(dataArr) {
+		// body...
+		zips = []
+		for (var i = 0; i < dataArr.length; i++) {
+			zips.push(dataArr[i].Zip);
+		}
+
+		return zips;
+	}
+
+	function noiseLevel(noise, parkArr){
+
+		if (noise == 1) {
+
+			var noiseArr = getNewNoise(parkArr, 0, 1400);
+			return zipcodes(noiseArr);
+
+		} else if (noise == 2) {
+
+			var noiseArr = getNewNoise(parkArr, 14000, 2800);
+
+			return zipcodes(noiseArr);
+		} else {
+
+			var noiseArr = getNewNoise(parkArr, 2800, 4500);
+			return zipcodes(noiseArr);
+			}
+	}
+
+
+	function parkLevel(parks, noise, incomeArr){
+
+		if (parks ==1) {
+
+			var parkArr = getNoiseParks(incomeArr, 0, 19);
+
+			if(parkArr.length> 3){
+
+				return noiseLevel(noise, parkArr);
+
+			} else {
+				return zipcodes(parkArr);
+			}
+
+		} else if (parks = 2) {
+
+			var parkArr = getNoiseParks(incomeArr, 19, 38);
+
+
+
+
+			if(parkArr.length> 3){
+
+				return noiseLevel(noise, parkArr);
+
+			} else {
+				return zipcodes(parkArr);
+			}
+
+		}else{
+
+			var parkArr = getNoiseParks(incomeArr, 38, 60)
+
+			if(parkArr.length> 3){
+
+				return noiseLevel(noise, parkArr);
+
+			} else {
+				return zipcodes(parkArr);
+			}
+
+		}
+
+	}
+
+	//filter input:data output: zipcode
+	function filter(income, parks, noise, data) {
+		// income: will be a number 1, 2, 3, 4, 5
+		//parks: 1, 2, 3
+		//noise: 1, 2, 3
+		zips = [];
+		if (income == 1) {
+
+			var  incomeArr = getNewIncome(data, 0, 78000);
+
+			if (incomeArr.length>3) {
+
+				return parkLevel(parks, noise, incomeArr);
+
+			} else{
+				return zipcodes(incomeArr);
+			}
+
+		} else if (income == 2){
+
+			var  incomeArr = getNewIncome(data, 78000, 168000);
+
+			if (incomeArr.length>3) {
+
+				return parkLevel(parks, noise, incomeArr);
+
+			} else{
+				return zipcodes(incomeArr);
+			}
+
+		} else if (income == 3) {
+
+			var  incomeArr = getNewIncome(data, 168000, 258000);
+
+			if (incomeArr.length>3) {
+
+				return parkLevel(parks, noise, incomeArr);
+
+			} else{
+				return zipcodes(incomeArr);
+			}
+
+		} else if (income == 4){
+
+			var  incomeArr = getNewIncome(data, 258000, 348000);
+
+			if (incomeArr.length>3) {
+
+				return parkLevel(parks, noise, incomeArr);
+
+			} else{
+				return zipcodes(incomeArr);
+			}
+
+		}else{
+
+			var  incomeArr = getNewIncome(data, 348000, 400000);
+
+			if (incomeArr.length>3) {
+
+				return parkLevel(parks, noise, incomeArr);
+
+			} else{
+				return zipcodes(incomeArr);
+			}
+
+		}
+	}
+
+	// // When the user scrolls the page, execute myFunction
+	// window.onscroll = function() {myFunction()};
+
+	// Get the navbar
+	var navbar = document.getElementById("navbar");
+
+	// Get the offset position of the navbar
+	// var sticky = navbar.offsetTop;
+    //
+	// // Add the sticky class to the navbar when you reach its scroll position. Remove "sticky" when you leave the scroll position
+	// function myFunction() {
+	//   if (window.pageYOffset >= sticky) {
+	//     navbar.classList.add("sticky")
+	//   } else {
+	//     navbar.classList.remove("sticky");
+	//   }
+	// }
+
+    //
+	// var data = [
+	//   {
+	//     className: 'characteristics', // optional can be used for styling
+	//     axes: [
+	//       {axis: "Parks", value: 10},
+	//       {axis: "Transportation", value: 6},
+	//       {axis: "Noise", value: 5},
+	//       {axis: "Income", value: 9}
+	//     ]
+	//   },
+    //
+	// ];
+
+    var map = L.mapbox.map('map').setView([40.75, -73.94], 11);
+
+function setMap(){
+  map.eachLayer(function (layer) {
+      if( layer instanceof L.GeoJSON )
+    map.removeLayer(layer);
+  });
+  geojson1 = L.geoJson(neighborhoods, {
+      style: style1,
+      onEachFeature: onEachFeature1,
+  }).addTo(map);
+  geojson2 = L.geoJson(neighborhoods, {
+      style: style2,
+      onEachFeature: onEachFeature2,
+      filter: picnicFilter
+  }).addTo(map);
+}
+
+function picnicFilter(feature) {
+        if (zcodes.indexOf((""+feature.properties.postalCode+""))!=-1) {
+            return true;
+        }else{
+            return false;
+        }
+}
+// Set base style of vector data
+ function style1(feature) {
+     return {
+     weight: 0,
+     fillOpacity: 0.5,
+     fillColor: '#fde683'
+     };
+ }
+
+ function style2(feature) {
+     return {
+     weight: 0,
+     fillOpacity: 0.5,
+     fillColor: 'blue'
+     };
+ }
+
+// Set hover colors
+ function highlightFeature(e) {
+ var layer = e.target;
+     layer.setStyle({
+         weight: 5,
+         opacity: 1,
+         color: '#09F',
+         dashArray: '3',
+         fillOpacity: 0.7,
+         fillColor: '#FEB24C'
+     });
+ }
+
+function compare(e) {
+ var postalCode = e.target.feature.properties.postalCode;
+
+ var data = [
+   {
+     className: 'characteristics', // optional can be used for styling
+     axes: [
+       {axis: "Parks", value: zip[postalCode].parks},
+       {axis: "Transportation", value: 10},
+       {axis: "Noise", value: zip[postalCode].noise/100},
+       {axis: "Income", value: zip[postalCode].income/5000}
+     ]
+   },
+
+ ];
+
+ var chart = RadarChart.chart();
+ var cfg = {
+    w: 600, //Width of the circle
+    h: 600, //Height of the circle
+    margin: {top: 20, right: 20, bottom: 20, left: 20}, //The margins of the SVG
+    labelFactor: 0.85,  //How much farther than the radius of the outer circle should the labels be placed
+    wrapWidth: 60,      //The number of pixels after which a label needs to be given a new line
+    opacityArea: 0.35,  //The opacity of the area of the blob
+    dotRadius: 4,       //The size of the colored circles of each blog
+    opacityCircles: 0.1,//The opacity of the circles of each blob
+    strokeWidth: 0.7,   //The width of the stroke around each blob
+    roundStrokes: false,//If true the area and stroke will follow a round path (cardinal-closed)
+    color: d3.scale.category10(),  //Color function
+    hover: true,
+    axisLabels: true,
+    tickLabels: true,
+    fields: false,
+    scalesAndAxes: true,
+  };
+
+  var chart = RadarChart.chart();
+  var cfg = chart.config(); // retrieve default config
+  if(document.getElementById("chart")!=null){
+      document.getElementById("chart").remove();
+  }
+  if(document.getElementById("visit")==null){
+     svgList = d3.select('body').append('ul').attr("id", "visit");
+     svgList.text("Zipcodes you have explored:");
+  }
+  var svgListItem = svgList.append('li').text(postalCode);
+  var svgChart = d3.select('body').append('div').attr("id", "chart");
+  var chartTitle = d3.select('#chart').append('h2').text("You are viewing zipcode: "+postalCode);
+  var svg = d3.select('#chart').append('svg')
+    .attr('width', cfg.w )
+    .attr('height', cfg.h);
+  svg.append('g').classed('single', 1).datum(data).call(chart);
+
+  $("html, body").animate({ scrollTop: 1200 }, "slow");
+}
+
+// A function to reset the colors when a neighborhood is not longer 'hovered'
+ function resetHighlight1(e) {
+     geojson1.resetStyle(e.target);
+
+ }
+
+ function resetHighlight2(e) {
+     geojson2.resetStyle(e.target);
+ }
+
+// Tell MapBox.js what functions to call when mousing over and out of a neighborhood
+ function onEachFeature1(feature, layer) {
+ layer.on({
+ mouseover: highlightFeature,
+ mouseout: resetHighlight1,
+ click: compare
+ });
+ }
+ function onEachFeature2(feature, layer) {
+ layer.on({
+ mouseover: highlightFeature,
+ mouseout: resetHighlight2,
+ click: compare
+ });
+ }
+
+// Add vector data to map
+
+
+// Here is where the magic happens: Manipulate the z-index of tile layers,
+ // this makes sure our vector data shows up above the background map and
+ // under roads and labels.
+ var topPane = map._createPane('leaflet-top-pane', map.getPanes().mapPane);
+ var topLayer = L.mapbox.tileLayer('bobbysud.map-3inxc2p4').addTo(map);
+ topPane.appendChild(topLayer.getContainer());
+ topLayer.setZIndex(100);
+// });
+geojson1 = L.geoJson(neighborhoods, {
+    style: style1,
+    onEachFeature: onEachFeature1,
+}).addTo(map);
+//pinning action
+ // function clickActions(d) {
+ //      d3.select("#pinDiv")
+ //        .html(d3.select("#pinDiv").html() + makePinnedInfo(d));
+ //      d3.select("#pinnedCount")
+ //        .html("(" + (document.getElementById("pinDiv").children.length - 1) + ")");
+ //    }
+
+
+//making the pin
+ // function makePinnedInfo(d) {
+ //      return `
+ //      <div class = "pinnedInfo">
+ //        <button onclick="deleteDiv(this)"> x </button>
+ //        ${makeInfo(d)}
+ //      </div>
+ //      `
+ //    }
+ //  }
+
+
+//deleting pin
+ //  function deleteDiv(button) {
+ //    d3.select(button.parentNode).remove();
+ //    d3.select("#pinnedCount")
+ //      .html("(" + (document.getElementById("pinDiv").children.length - 1) + ")");
+ //  }
+// setTimeout(function(){
+var genText = d3.select('#container').append('div').attr('id','textportion');
+var text = genText.append("p").text("New York City's 304 square miles provide living space for more than 10 million inhabitants. However, not all living spaces are created equal. Some locations are considered more liveable than others. We compiled data on living conditions that matter to most people when deciding on where to live, including access to public transport, noise levels, and the average income in the area which often dictates how high the cost of living is.");
+text.style("text-align:center");
+text.style("font-size:18px");
+text.style("width:20%");
+// }, 1000);
+
+var drop = d3.select('body').append('div').attr('id','barChartArea');
+var thisBar = d3.select('#barChartArea').append('div').attr('id','drop');
+var thisBar2 = d3.select('#barChartArea').append('div').attr('id','thisbarchart');
+var margin = {top: 80, right: 180, bottom: 80, left: 180},
+    width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+var svg = d3.select("#thisbarchart").append("svg")
+	.attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+	.append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+d3.tsv("nycbar.tsv", function(error, data){
+
+	// filter year
+	var data = data.filter(function(d){return d;});
+	// Get every column value
+	var elements = Object.keys(data[0])
+		.filter(function(d) {
+			return ((d!="Borough"));
+		})
+
+	var selection=elements[0]
+	console.log(elements)
+
+
+	var y = d3.scale.linear()
+			.domain([0, d3.max(data, function(d){
+				return +d[selection];
+			})])
+			.range([height, 0]);
+
+	var x = d3.scale.ordinal()
+			.domain(data.map(function(d){ return d.Borough;}))
+			.rangeBands([0, width]);
+
+
+	var xAxis = d3.svg.axis()
+		.scale(x)
+	    .orient("bottom");
+
+	var yAxis = d3.svg.axis()
+		.scale(y)
+	    .orient("left");
+
+	svg.append("g")
+    	.attr("class", "x axis")
+    	.attr("transform", "translate(0," + height + ")")
+    	.call(xAxis)
+    	.selectAll("text")
+    	.style("font-size", "15px")
+      	.style("text-anchor", "end")
+      	.attr("dx", "-.8em")
+      	.attr("dy", "-.55em")
+      	.attr("transform", "rotate(-45)" );
+
+
+ 	svg.append("g")
+    	.attr("class", "y axis")
+    	.call(yAxis);
+
+	svg.selectAll("rectangle")
+		.data(data)
+		.enter()
+		.append("rect")
+		.attr("class","rectangle")
+		.attr("width", width/data.length)
+		.attr("height", function(d){
+			return height - y(+d[selection]);
+		})
+		.attr("x", function(d, i){
+			return (width / data.length) * i ;
+		})
+		.attr("y", function(d){
+			return y(+d[selection]);
+		})
+		.append("title")
+		.text(function(d){
+			return d.State + " : " + d[selection];
+		});
+
+	var selector = d3.select("#drop")
+    	.append("select")
+    	.attr("id","dropdown")
+    	.on("change", function(d){
+        	selection = document.getElementById("dropdown");
+
+        	y.domain([0, d3.max(data, function(d){
+				return +d[selection.value];})]);
+
+        	yAxis.scale(y);
+
+        	d3.selectAll(".rectangle")
+           		.transition()
+	            .attr("height", function(d){
+					return height - y(+d[selection.value]);
+				})
+				.attr("x", function(d, i){
+					return (width / data.length) * i ;
+				})
+				.attr("y", function(d){
+					return y(+d[selection.value]);
+				})
+           		.ease("linear")
+           		.select("title")
+           		.text(function(d){
+           			return d.Borough + " : " + d[selection.value];
+           		});
+
+           	d3.selectAll("g.y.axis")
+           		.transition()
+           		.call(yAxis);
+
+         });
+
+    selector.selectAll("option")
+      .data(elements)
+      .enter().append("option")
+      .attr("value", function(d){
+        return d;
+      })
+      .text(function(d){
+        return d;
+      })
+
+      $("#scroll").click(function() {
+        $("html, body").animate({ scrollTop: 700 }, "slow");
+        return false;
+      });
+
+      $("#reset").click(function() {
+        zcodes=[];
+        resetZip();
+        setMap();
+        $("#textportion p").text("New York City's 304 square miles provide living space for more than 10 million inhabitants. However, not all living spaces are created equal. Some locations are considered more liveable than others. We compiled data on living conditions that matter to most people when deciding on where to live, including access to public transport, noise levels, and the average income in the area which often dictates how high the cost of living is.");
+      });
+
+});
+</script>
+
+</body>
+</html>
